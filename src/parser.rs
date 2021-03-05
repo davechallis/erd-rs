@@ -34,7 +34,31 @@ use nom::{IResult, branch::alt, bytes::{
         preceded,
     }};
 
-pub fn parse(i: &str) -> IResult<&str, Vec<ast::Ast>> {
+pub fn parse_erd(i: &str) -> Result<ast::Erd, String> {
+    let a = match parse(i) {
+        Ok((_m, a)) => a,
+        Err(err) => return Err(err.to_string()),
+    };
+
+    let mut entities = Vec::new();
+    let mut relationships = Vec::new();
+    for o in a.into_iter() {
+        match o {
+            ast::Ast::Entity(e) => entities.push(e),
+            ast::Ast::Relation(r) => relationships.push(r),
+            ast::Ast::Attribute(a) => {
+                match entities.last_mut() {
+                    Some(e) => e.add_attribute(a),
+                    None => return Err(String::from("found attribute without a preceding entity to attach it to")),
+                }
+            },
+        }
+    }
+
+    Ok(ast::Erd { entities, relationships })
+}
+
+fn parse(i: &str) -> IResult<&str, Vec<ast::Ast>> {
     all_consuming(
         many0(
             delimited(

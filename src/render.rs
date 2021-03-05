@@ -1,10 +1,39 @@
 use std::io::{Write, Result};
 use crate::ast;
 
-fn render<W: Write>(w: &mut W, erd: &[ast::Ast]) -> Result<()> {
+pub fn render<W: Write>(w: &mut W, erd: &ast::Erd) -> Result<()> {
     graph_header(w)?;
-    graph_footer(w)?;
 
+    // TODO: fix rendering of these. Also, should these be output for an empty graph?
+    graph_attributes(w, &[
+        ("label", "<<FONT POINT-SIZE=\"20\">T</FONT>>"),
+        ("labeljust", "l"),
+        ("labelloc", "t"),
+        ("rankdir", "LR"),
+        ("splines", "spline"),
+    ])?;
+
+    node_attributes(w, &[
+        ("label", r#""\N""#),
+        ("shape", "plaintext"),
+    ])?;
+
+    edge_attributes(w, &[
+        ("color", "gray50"),
+        ("minlen", "2"),
+        ("style", "dashed"),
+    ])?;
+
+    for e in &erd.entities {
+        render_entity(w, e)?;
+    }
+
+    for r in &erd.relationships {
+        render_relationship(w, r)?;
+    }
+
+    graph_footer(w)?;
+ 
     Ok(())
 }
 
@@ -103,8 +132,9 @@ mod tests {
 
     #[test]
     fn test_empty_graph() {
+        let erd = ast::Erd::default();
         let mut buf = Vec::new();
-        render(&mut buf, &[]).unwrap();
+        render(&mut buf, &erd).unwrap();
         assert_eq!(from_utf8(&buf).unwrap(), "graph {\n}\n");
     }
 
@@ -122,5 +152,34 @@ r#"graph {
     ];
 }
 "#);
+    }
+
+    #[test]
+    fn render_file() {
+        let mut f = std::fs::File::create("/tmp/out.dot").unwrap();
+        graph_header(&mut f).unwrap();
+
+        graph_attributes(&mut f, &[
+            ("label", "<<FONT POINT-SIZE=\"20\">T</FONT>>"),
+            ("labeljust", "l"),
+            ("labelloc", "t"),
+            ("rankdir", "LR"),
+            ("splines", "spline"),
+        ]).unwrap();
+
+        node_attributes(&mut f, &[
+            ("label", r#""\N""#),
+            ("shape", "plaintext"),
+        ]).unwrap();
+
+        edge_attributes(&mut f, &[
+            ("color", "gray50"),
+            ("minlen", "2"),
+            ("style", "dashed"),
+        ]).unwrap();
+
+        let s = std::include_str!("../examples/simple.er");
+        let erd = crate::parser::parse_erd(s).unwrap();
+        render(&mut f, &erd).unwrap();
     }
 }

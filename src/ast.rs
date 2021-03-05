@@ -1,6 +1,13 @@
 use std::fmt;
 use std::collections::HashMap;
 
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Erd {
+    pub entities: Vec<Entity>,
+    pub relationships: Vec<Relation>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ast {
     Entity(Entity),

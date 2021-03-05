@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::{fs::File, io::{self, Read}, path::Path};
 mod ast;
 mod parser;
 mod render;
@@ -41,8 +41,32 @@ fn main() {
         }
     };
 
-    println!("f: {}", input);
+    let erd = match parser::parse_erd(&input) {
+        Ok(erd) => erd,
+        Err(err) => {
+            eprintln!("Failed to parse ERD file: {}", err);
+            std::process::exit(1);
+        }
+    };
 
+    let mut output: Box<dyn std::io::Write> = match output_file {
+        Some(ref path) => {
+            let f = match File::create(path) {
+                Ok(f) => f,
+                Err(err) => {
+                    eprintln!("Failed to open file '{}' for writing: {}", path, err);
+                    std::process::exit(1);
+                }
+            };
+            Box::new(f)
+        },
+        None => Box::new(io::stdout()),
+    };
+
+    if let Err(err) = render::render(&mut output, &erd) {
+        eprintln!("Failed to render: {}", err);
+        std::process::exit(1);
+    }
 }
 
 fn print_usage(prog: &str, opts: getopts::Options) {
