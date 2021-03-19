@@ -75,7 +75,7 @@ fn render_relationship<W: Write>(w: &mut W, r: &ast::Relation) -> Result<()> {
 }
 
 fn render_entity<W: Write>(w: &mut W, e: &ast::Entity) -> Result<()> {
-    let bgcolor = match e.options.get("bgcolor") {
+    let bgcolor = match e.entity_options.get("bgcolor") {
         Some(c) => c,
         None => "#d0e0d0",
     };
@@ -135,7 +135,25 @@ mod tests {
         let erd = ast::Erd::default();
         let mut buf = Vec::new();
         render(&mut buf, &erd).unwrap();
-        assert_eq!(from_utf8(&buf).unwrap(), "graph {\n}\n");
+        assert_eq!(from_utf8(&buf).unwrap(), r#"graph {
+    graph [
+        label=<<FONT POINT-SIZE="20">T</FONT>>,
+        labeljust=l,
+        labelloc=t,
+        rankdir=LR,
+        splines=spline,
+    ];
+    node [
+        label="\N",
+        shape=plaintext,
+    ];
+    edge [
+        color=gray50,
+        minlen=2,
+        style=dashed,
+    ];
+}
+"#);
     }
 
     #[test]

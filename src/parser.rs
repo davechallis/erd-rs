@@ -1,20 +1,19 @@
-use crate::ast;
+use crate::ast::{self, GlobalOption, GlobalOptionType};
 use std::collections::HashMap;
+use std::hash::Hash;
 use nom::{IResult, branch::alt, bytes::{
-        complete::{is_a, is_not, tag, take_while, take_while1},
+        complete::{is_not, tag, take_while, take_while1},
     }, character::{
         complete::{
             alphanumeric1,
             char,
             line_ending,
             one_of,
-            satisfy,
             space0,
             not_line_ending,
             multispace1,
             multispace0,
         },
-        is_alphabetic,
         is_alphanumeric
     }, combinator::{
         value,
@@ -23,7 +22,6 @@ use nom::{IResult, branch::alt, bytes::{
         all_consuming,
     }, multi::{
         many0,
-        many1,
         separated_list1,
     },
     sequence::{
@@ -42,36 +40,74 @@ pub fn parse_erd(i: &str) -> Result<ast::Erd, String> {
 
     let mut entities = Vec::new();
     let mut relationships = Vec::new();
+    let mut title_options = HashMap::new();
+    let mut header_options = HashMap::new();
+    let mut entity_options = HashMap::new();
+    let mut relationship_options = HashMap::new();
+
     for o in a.into_iter() {
         match o {
-            ast::Ast::Entity(e) => entities.push(e),
-            ast::Ast::Relation(r) => relationships.push(r),
+            ast::Ast::Entity(mut e) => {
+                merge_hashmap(&mut e.header_options, &header_options);
+                merge_hashmap(&mut e.entity_options, &entity_options);
+                entities.push(e);
+            },
+            ast::Ast::Relation(mut r) => {
+                merge_hashmap(&mut r.options, &relationship_options);
+                relationships.push(r);
+            },
             ast::Ast::Attribute(a) => {
                 match entities.last_mut() {
                     Some(e) => e.add_attribute(a),
                     None => return Err(String::from("found attribute without a preceding entity to attach it to")),
                 }
             },
+            ast::Ast::GlobalOption(GlobalOption { option_type, options }) => {
+                match option_type {
+                    GlobalOptionType::Title => title_options.extend(options),
+                    GlobalOptionType::Header => header_options.extend(options),
+                    GlobalOptionType::Entity => entity_options.extend(options),
+                    GlobalOptionType::Relationship => relationship_options.extend(options),
+                }
+            }
         }
     }
 
-    Ok(ast::Erd { entities, relationships })
+    Ok(ast::Erd { entities, relationships, title_options })
+}
+
+fn merge_hashmap<K: Eq + Hash + Clone, V: Clone>(dst: &mut HashMap<K, V>, src: &HashMap<K, V>) {
+    dst.extend(src.iter().map(|(k, v)| (k.clone(), v.clone())))
 }
 
 fn parse(i: &str) -> IResult<&str, Vec<ast::Ast>> {
-    all_consuming(
-        many0(
-            delimited(
-                blank_or_comment,
-                alt((
-                    map(entity, |e| ast::Ast::Entity(e)),
-                    map(relation, |r| ast::Ast::Relation(r)),
-                    map(attribute, |a| ast::Ast::Attribute(a)),
-                )),
-                eol_comment,
+    let (_, (mut global_opts, mut era)) = all_consuming(
+        pair(
+            many0(
+                delimited(
+                    blank_or_comment, 
+                    map(global_option, |g| ast::Ast::GlobalOption(g)),
+                    eol_comment
+                )
+            ),
+            all_consuming(
+                many0(
+                    delimited(
+                        blank_or_comment,
+                        alt((
+                            map(entity, |e| ast::Ast::Entity(e)),
+                            map(relation, |r| ast::Ast::Relation(r)),
+                            map(attribute, |a| ast::Ast::Attribute(a)),
+                        )),
+                        eol_comment,
+                    )
+                )
             )
         )
-    )(i)
+    )(i)?;
+
+    global_opts.append(&mut era);
+    Ok((i, global_opts))
 }
 
 fn comment(i: &str) -> IResult<&str, &str> {
@@ -107,7 +143,7 @@ fn eol_comment(i: &str) -> IResult<&str, ()> {
 fn entity(i: &str) -> IResult<&str, ast::Entity> {
     let (i, name) = delimited(char('['), ident, char(']'))(i)?;
     let (i, opts) = trailing_options(i)?;
-    Ok((i, ast::Entity { name: name.to_owned(), attribs: Vec::new(), options: opts }))
+    Ok((i, ast::Entity { name: name.to_owned(), attribs: Vec::new(), header_options: opts.clone(), entity_options: opts }))
 }
 
 fn attribute(i: &str) -> IResult<&str, ast::Attribute> {
@@ -161,6 +197,26 @@ fn cardinality(i: &str) -> IResult<&str, ast::Cardinality> {
     Ok((i, c))
 }
 
+fn global_option(i: &str) -> IResult<&str, GlobalOption> {
+    let (i, name) = alt((
+        tag("title"),
+        tag("header"),
+        tag("entity"),
+        tag("relationship"),
+    ))(i)?;
+
+    let option_type = match name {
+        "title" => GlobalOptionType::Title,
+        "header" => GlobalOptionType::Header,
+        "entity" => GlobalOptionType::Entity,
+        "relationship" => GlobalOptionType::Relationship,
+        _ => panic!("unhandled global optional type"),
+    };
+
+    let (i, options) = trailing_options(i)?;
+    Ok((i, GlobalOption { option_type, options }))
+}
+
 fn option(i: &str) -> IResult<&str, (&str, &str)> {
     separated_pair(
         alphanumeric1, 
@@ -179,11 +235,13 @@ fn trailing_options(i: &str) ->IResult<&str, HashMap<String, String>> {
     Ok((i, opts))
 }
 fn options(i: &str) -> IResult<&str, Vec<(&str, &str)>> {
-    delimited(
+    let (i, opts) = delimited(
         terminated(char('{'), space0),
-         separated_list1(delimited(space0, char(','), space0), option), 
+         opt(separated_list1(delimited(space0, char(','), space0), option)),
          preceded(space0, char('}')),
-    )(i)
+    )(i)?;
+
+    Ok((i, opts.unwrap_or_else(|| Vec::new())))
 }
 
 fn quoted(i: &str) -> IResult<&str, &str> {
@@ -211,6 +269,22 @@ fn ident_no_space(i: &str) -> IResult<&str, &str> {
     take_while1(|c| is_alphanumeric(c as u8) || c == '_')(i)
 }
 
+// #[derive(Debug, PartialEq)]
+// pub enum ErdParseError<I> {
+//     UnrecognisedGlobalOption,
+//     Nom(I, nom::error::ErrorKind),
+// }
+
+// impl<I> nom::error::ParseError<I> for ErdParseError<I> {
+//     fn from_error_kind(input: I, kind: ErrorKind) -> Self {
+//         ErdParseError::Nom(input, kind)
+//     }
+
+//     fn append(_: I, _: ErrorKind, other: Self) -> Self {
+//         other
+//     }
+//}
+
 #[cfg(test)]
 mod tests {
     use std::include_str;
@@ -222,21 +296,17 @@ mod tests {
     #[test]
     fn test_parse_simple() {
         let s = include_str!("../examples/simple.er");
-        let (i, a) = parse(s).unwrap();
-        for x in a {
-            println!("{:?}", x);
-        }
-        assert!(i.is_empty());
+        let e = parse_erd(s).unwrap();
+        assert_eq!(e.entities.len(), 2);
+        assert_eq!(e.relationships.len(), 1);
     }
 
     #[test]
     fn test_parse_nfldb() {
         let s = include_str!("../examples/nfldb.er");
-        let (i, a) = parse(s).unwrap();
-        for x in a {
-            println!("{:?}", x);
-        }
-        assert!(i.is_empty());
+        let e = parse_erd(s).unwrap();
+        assert_eq!(e.entities.len(), 7);
+        assert_eq!(e.relationships.len(), 13);
     }
 
     #[test]
@@ -471,5 +541,36 @@ mod tests {
         let (i, opts) = options(r#"{  k1:"v1", k2:"v2" ,  k3:"v3"}"#).unwrap();
         assert!(i.is_empty());
         assert_eq!(opts, vec![("k1", "v1"), ("k2", "v2"), ("k3", "v3")]);
+    }
+
+    #[test]
+    fn test_global_options() {
+        let (i, go) = global_option("title {}").unwrap();
+        assert!(i.is_empty());
+        assert_eq!(go.option_type, GlobalOptionType::Title);
+        assert!(go.options.is_empty());
+
+        let (i, go) = global_option(r#"header {k: "v"}"#).unwrap();
+        assert!(i.is_empty());
+        assert_eq!(go.option_type, GlobalOptionType::Header);
+        assert_eq!(go.options.len(), 1);
+        assert_eq!(go.options["k"], "v");
+
+        let (i, go) = global_option(r#"entity {k1: "v1", k2: "v2"}"#).unwrap();
+        assert!(i.is_empty());
+        assert_eq!(go.option_type, GlobalOptionType::Entity);
+        assert_eq!(go.options.len(), 2);
+        assert_eq!(go.options["k1"], "v1");
+        assert_eq!(go.options["k2"], "v2");
+
+        let (i, go) = global_option(r#"relationship{ k1:"X" , k2 :   "v2", k1:"v1" }"#).unwrap();
+        println!("{}", i);
+        assert!(i.is_empty());
+        assert_eq!(go.option_type, GlobalOptionType::Relationship);
+        assert_eq!(go.options.len(), 2);
+        assert_eq!(go.options["k1"], "v1");
+        assert_eq!(go.options["k2"], "v2");
+
+        assert!(global_option(r#"something {}"#).is_err());
     }
 }

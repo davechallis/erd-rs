@@ -6,6 +6,7 @@ use std::collections::HashMap;
 pub struct Erd {
     pub entities: Vec<Entity>,
     pub relationships: Vec<Relation>,
+    pub title_options: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,13 +14,29 @@ pub enum Ast {
     Entity(Entity),
     Attribute(Attribute),
     Relation(Relation),
+    GlobalOption(GlobalOption),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GlobalOption {
+    pub option_type: GlobalOptionType,
+    pub options: HashMap<String, String>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum GlobalOptionType {
+    Title,
+    Header,
+    Entity,
+    Relationship,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Entity {
     pub name: String,
     pub attribs: Vec<Attribute>,
-    pub options: HashMap<String, String>,
+    pub header_options: HashMap<String, String>,
+    pub entity_options: HashMap<String, String>,
 }
 
 impl Entity {
@@ -27,14 +44,16 @@ impl Entity {
         Self {
             name: name.into(),
             attribs: Vec::new(),
-            options,
+            header_options: options.clone(),
+            entity_options: options,
         }
     }
     pub fn with_name<S: Into<String>>(name: S) -> Self {
         Self {
             name: name.into(),
             attribs: Vec::new(),
-            options: HashMap::new(),
+            header_options: HashMap::new(),
+            entity_options: HashMap::new(),
         }
     }
     

@@ -1,4 +1,4 @@
-use std::{fs::File, io::{self, Read}, path::Path};
+use std::{fs::File, io::{self, Read}};
 mod ast;
 mod parser;
 mod render;
@@ -14,7 +14,7 @@ fn main() {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(err) => print_usage_fatal(&prog, opts),
+        Err(_) => print_usage_fatal(&prog, opts),
     };
 
     if matches.opt_present("h") {
