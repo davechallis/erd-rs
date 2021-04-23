@@ -18,13 +18,11 @@ completed, but not yet feature complete.
 
 Approximate TODO:
 
-* default options
-* global options (parsing is implemented, but rendering is not)
+* rendering customisation
 * checks that entities exist when parsing relationships
 * code cleanup/refactoring
 * internal function/parser documentation
-* user guide/overview
+* user guide/overvie(is implemented, but rendering is not)w
 * additional error handling
-* additional unit tests
 * add github actions to run tests
 * add action to build/push docker image to docker hub
