@@ -13,3 +13,4 @@ getopts = "0.2"
 
 [dev-dependencies]
 maplit = "1.0"
+pretty_assertions = "0.7"

@@ -110,10 +110,10 @@ pub struct GlobalOption {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TitleOptions {
-    size: u8,
-    label: Option<String>,
-    color: Option<String>,
-    font: Option<String>,
+    pub size: u8,
+    pub label: Option<String>,
+    pub color: Option<String>,
+    pub font: Option<String>,
 }
 
 impl TitleOptions {

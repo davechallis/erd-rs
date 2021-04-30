@@ -4,24 +4,32 @@ use crate::ast;
 pub fn render<W: Write>(w: &mut W, erd: &ast::Erd) -> Result<()> {
     graph_header(w)?;
 
-    // TODO: fix rendering of these. Also, should these be output for an empty graph?
-    graph_attributes(w, &[
-        ("label", "<<FONT POINT-SIZE=\"20\">T</FONT>>"),
-        ("labeljust", "l"),
-        ("labelloc", "t"),
-        ("rankdir", "LR"),
-        ("splines", "spline"),
+    let mut graph_attrs = Vec::new();
+    dbg!(&erd.title_options);
+
+    if let Some(label) = &erd.title_options.label {
+        graph_attrs.push((
+            "label",
+            format!("<<FONT POINT-SIZE=\"{}\">{}</FONT>>", erd.title_options.size, label),
+        ));
+        graph_attrs.push(("labeljust", "l".to_owned()));
+        graph_attrs.push(("labelloc", "t".to_owned()));
+    }
+
+    graph_attrs.push(("rankdir", "LR".to_owned()));
+    graph_attrs.push(("splines", "spline".to_owned()));
+
+    graph_attributes(w, &graph_attrs)?;
+
+    node_attributes(w, &vec![
+        ("label", r#""\N""#.to_owned()),
+        ("shape", "plaintext".to_owned()),
     ])?;
 
-    node_attributes(w, &[
-        ("label", r#""\N""#),
-        ("shape", "plaintext"),
-    ])?;
-
-    edge_attributes(w, &[
-        ("color", "gray50"),
-        ("minlen", "2"),
-        ("style", "dashed"),
+    edge_attributes(w, &vec![
+        ("color", "gray50".to_owned()),
+        ("minlen", "2".to_owned()),
+        ("style", "dashed".to_owned()),
     ])?;
 
     for e in &erd.entities {
@@ -49,8 +57,8 @@ fn render_attribute<W: Write>(w: &mut W, a: &ast::Attribute) -> Result<()> {
         (false, false)  => a.field.clone(),
     };
     match &a.options.label {
-        Some(l) => write!(w, r#"<TR><TD ALIGN="LEFT">{} [{}]</TD></TR> "#, field, l),
-        None => write!(w, r#"<TR><TD ALIGN="LEFT">{}</TD></TR> "#, a.field),
+        Some(l) => write!(w, "    <TR><TD ALIGN=\"LEFT\">{} [{}]</TD></TR>\n", field, l),
+        None => write!(w, "    <TR><TD ALIGN=\"LEFT\">{}</TD></TR>\n", a.field),
     }
 }
 
@@ -78,16 +86,15 @@ fn render_entity<W: Write>(w: &mut W, e: &ast::Entity) -> Result<()> {
     write!(w, "    \"{}\" [\n", e.name)?;
     write!(w, r##"        label=<
 <FONT FACE="Helvetica">
-  <TABLE BGCOLOR="{}" BORDER="0" CELLBORDER="1" CELLPADDING="4" CELLSPACING="0">
+  <TABLE BORDER="0" CELLBORDER="1" CELLPADDING="4" CELLSPACING="0">
     <TR><TD><B><FONT POINT-SIZE="16">{}</FONT></B></TD></TR>
-"##, &e.options.background_color, e.name)?;
+"##, e.name)?;
 
     for a in &e.attribs {
         render_attribute(w, a)?;
     }
 
-    write!(w, r#"
-  </TABLE>
+    write!(w, r#"  </TABLE>
 </FONT>
 >];
 "#)?;
@@ -95,19 +102,19 @@ fn render_entity<W: Write>(w: &mut W, e: &ast::Entity) -> Result<()> {
     Ok(())
 }
 
-fn graph_attributes<W: Write>(w: &mut W, opts: &[(&str, &str)]) -> Result<()> {
+fn graph_attributes<W: Write>(w: &mut W, opts: &Vec<(&str, String)>) -> Result<()> {
     attributes(w, "graph", opts)
 }
 
-fn node_attributes<W: Write>(w: &mut W, opts: &[(&str, &str)]) -> Result<()> {
+fn node_attributes<W: Write>(w: &mut W, opts: &Vec<(&str, String)>) -> Result<()> {
     attributes(w, "node", opts)
 }
 
-fn edge_attributes<W: Write>(w: &mut W, opts: &[(&str, &str)]) -> Result<()> {
+fn edge_attributes<W: Write>(w: &mut W, opts: &Vec<(&str, String)>) -> Result<()> {
     attributes(w, "edge", opts)
 }
 
-fn attributes<W: Write>(w: &mut W, name: &str, opts: &[(&str, &str)]) -> Result<()> {
+fn attributes<W: Write>(w: &mut W, name: &str, opts: &Vec<(&str, String)>) -> Result<()> {
     write!(w, "    {} [\n", name)?;
     for (key, value) in opts {
         write!(w, "        {}={},\n", key, value)?;
@@ -124,18 +131,17 @@ fn graph_footer<W: Write>(w: &mut W) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::parse_erd;
     use std::str::from_utf8;
+    use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
-    fn test_empty_graph() {
+    fn empty_graph() {
         let erd = ast::Erd::default();
         let mut buf = Vec::new();
         render(&mut buf, &erd).unwrap();
         assert_eq!(from_utf8(&buf).unwrap(), r#"graph {
     graph [
-        label=<<FONT POINT-SIZE="20">T</FONT>>,
-        labeljust=l,
-        labelloc=t,
         rankdir=LR,
         splines=spline,
     ];
@@ -153,10 +159,107 @@ mod tests {
     }
 
     #[test]
+    fn title_and_entity() {
+        let s = r#"
+title {label: "Foo"}
+
+[thing]
+"#;
+        let erd = parse_erd(s).unwrap();
+        let mut buf = Vec::new();
+        render(&mut buf, &erd).unwrap();
+        assert_eq!(from_utf8(&buf).unwrap(), r##"graph {
+    graph [
+        label=<<FONT POINT-SIZE="30">Foo</FONT>>,
+        labeljust=l,
+        labelloc=t,
+        rankdir=LR,
+        splines=spline,
+    ];
+    node [
+        label="\N",
+        shape=plaintext,
+    ];
+    edge [
+        color=gray50,
+        minlen=2,
+        style=dashed,
+    ];
+    "thing" [
+        label=<
+<FONT FACE="Helvetica">
+  <TABLE BORDER="0" CELLBORDER="1" CELLPADDING="4" CELLSPACING="0">
+    <TR><TD><B><FONT POINT-SIZE="16">thing</FONT></B></TD></TR>
+  </TABLE>
+</FONT>
+>];
+}
+"##);
+    }
+
+    #[test]
+    fn simple() {
+        let s = include_str!("../examples/simple.er");
+        let erd = parse_erd(s).unwrap();
+        let mut buf = Vec::new();
+        render(&mut buf, &erd).unwrap();
+        assert_eq!(from_utf8(&buf).unwrap(), r##"graph {
+    graph [
+        rankdir=LR,
+        splines=spline,
+    ];
+    node [
+        label="\N",
+        shape=plaintext,
+    ];
+    edge [
+        color=gray50,
+        minlen=2,
+        style=dashed,
+    ];
+    "Person" [
+        label=<
+<FONT FACE="Helvetica">
+  <TABLE BORDER="0" CELLBORDER="1" CELLPADDING="4" CELLSPACING="0">
+    <TR><TD><B><FONT POINT-SIZE="16">Person</FONT></B></TD></TR>
+    <TR><TD ALIGN="LEFT">name</TD></TR>
+    <TR><TD ALIGN="LEFT">height</TD></TR>
+    <TR><TD ALIGN="LEFT">weight</TD></TR>
+    <TR><TD ALIGN="LEFT">birth date</TD></TR>
+    <TR><TD ALIGN="LEFT">birth_place_id</TD></TR>
+  </TABLE>
+</FONT>
+>];
+    "Birth Place" [
+        label=<
+<FONT FACE="Helvetica">
+  <TABLE BORDER="0" CELLBORDER="1" CELLPADDING="4" CELLSPACING="0">
+    <TR><TD><B><FONT POINT-SIZE="16">Birth Place</FONT></B></TD></TR>
+    <TR><TD ALIGN="LEFT">id</TD></TR>
+    <TR><TD ALIGN="LEFT">birth city</TD></TR>
+    <TR><TD ALIGN="LEFT">birth state</TD></TR>
+    <TR><TD ALIGN="LEFT">birth country</TD></TR>
+  </TABLE>
+</FONT>
+>];
+
+    "Person" -- "Birth Place" [ headlabel="1", taillabel="0..N" ];
+}
+"##);
+ 
+    }
+
+    #[test]
     fn test_empty_graph_with_opts() {
         let mut buf = Vec::new();
         graph_header(&mut buf).unwrap();
-        graph_attributes(&mut buf, &[("a", "b"), ("c", "\"d\"")]).unwrap();
+        graph_attributes(
+            &mut buf, 
+            &vec![
+                ("a", "b".to_owned()),
+                ("c", "\"d\"".to_owned())
+            ],
+        ).unwrap();
         graph_footer(&mut buf).unwrap();
         assert_eq!(from_utf8(&buf).unwrap(),
 r#"graph {
