@@ -148,13 +148,13 @@ impl Default for TitleOptions {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HeaderOptions {
     pub size: u8,
+    pub font: String,
+    pub border: u8,
+    pub cell_border: u8,
+    pub cell_spacing: u8,
+    pub cell_padding: u8,
 
     pub background_color: Option<String>,
-    pub border: Option<u8>,
-    pub cell_border: Option<u8>,
-    pub cell_spacing: Option<u8>,
-    pub cell_padding: Option<u8>,
-    pub font: Option<String>,
     pub label: Option<String>,
     pub color: Option<String>,
     pub border_color: Option<String>,
@@ -178,12 +178,12 @@ impl HeaderOptions {
                 OPT_LABEL => self.label = Some(v.clone()),
                 OPT_COLOR => self.color = Some(v.clone()),
                 OPT_BACKGROUND_COLOR => self.background_color = Some(v.clone()),
-                OPT_FONT => self.font = Some(v.clone()),
+                OPT_FONT => self.font = v.clone(),
                 OPT_BORDER_COLOR => self.border_color = Some(v.clone()),
-                OPT_BORDER => self.border = Some(match v.parse() {
+                OPT_BORDER => self.border = match v.parse() {
                     Ok(v) => v,
                     Err(_) => return Err(format!("could not parse border as integer: {}", v)),
-                }),
+                },
                 _ => return Err(format!("invalid header option: {}", v))
             }
         }
@@ -196,12 +196,12 @@ impl Default for HeaderOptions {
     fn default() -> Self {
         Self {
             size: 16,
+            font: "Helvetica".to_owned(),
+            border: 0,
+            cell_border: 1,
+            cell_padding: 4,
+            cell_spacing: 0,
             background_color: None,
-            border: None,
-            cell_border: None,
-            cell_spacing: None,
-            cell_padding: None,
-            font: None,
             label: None,
             color: None,
             border_color: None,

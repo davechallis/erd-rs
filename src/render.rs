@@ -1,132 +1,178 @@
 use std::io::{Write, Result};
 use crate::ast;
 
-pub fn render<W: Write>(w: &mut W, erd: &ast::Erd) -> Result<()> {
-    graph_header(w)?;
-
-    let mut graph_attrs = Vec::new();
-    dbg!(&erd.title_options);
-
-    if let Some(label) = &erd.title_options.label {
-        graph_attrs.push((
-            "label",
-            format!("<<FONT POINT-SIZE=\"{}\">{}</FONT>>", erd.title_options.size, label),
-        ));
-        graph_attrs.push(("labeljust", "l".to_owned()));
-        graph_attrs.push(("labelloc", "t".to_owned()));
-    }
-
-    graph_attrs.push(("rankdir", "LR".to_owned()));
-    graph_attrs.push(("splines", "spline".to_owned()));
-
-    graph_attributes(w, &graph_attrs)?;
-
-    node_attributes(w, &vec![
-        ("label", r#""\N""#.to_owned()),
-        ("shape", "plaintext".to_owned()),
-    ])?;
-
-    edge_attributes(w, &vec![
-        ("color", "gray50".to_owned()),
-        ("minlen", "2".to_owned()),
-        ("style", "dashed".to_owned()),
-    ])?;
-
-    for e in &erd.entities {
-        render_entity(w, e)?;
-    }
-
-    for r in &erd.relationships {
-        render_relationship(w, r)?;
-    }
-
-    graph_footer(w)?;
- 
-    Ok(())
+pub struct Renderer<W: Write> {
+    w: W
 }
 
-fn graph_header<W: Write>(w: &mut W) -> Result<()> {
-    write!(w, "graph {{\n")
-}
-
-fn render_attribute<W: Write>(w: &mut W, a: &ast::Attribute) -> Result<()> {
-    let field = match (a.pk, a.fk) {
-        (true, true)    => format!("<I><U>{}</U></I>", a.field),
-        (true, false)   => format!("<U>{}</U>", a.field),
-        (false, true)   => format!("<I>{}</I>", a.field),
-        (false, false)  => a.field.clone(),
-    };
-    match &a.options.label {
-        Some(l) => write!(w, "    <TR><TD ALIGN=\"LEFT\">{} [{}]</TD></TR>\n", field, l),
-        None => write!(w, "    <TR><TD ALIGN=\"LEFT\">{}</TD></TR>\n", a.field),
+impl<W: Write> Renderer<W> {
+    pub fn new(w: W) -> Self {
+        Self { w }
     }
-}
 
-fn render_relationship<W: Write>(w: &mut W, r: &ast::Relation) -> Result<()> {
-    let head_card = match r.card2 {
-        ast::Cardinality::ZeroOne => "{0,1}",
-        ast::Cardinality::One => "1",
-        ast::Cardinality::ZeroPlus => "0..N",
-        ast::Cardinality::OnePlus => "1..N",
-    };
-    let tail_card = match r.card1 {
-        ast::Cardinality::ZeroOne => "{0,1}",
-        ast::Cardinality::One => "1",
-        ast::Cardinality::ZeroPlus => "0..N",
-        ast::Cardinality::OnePlus => "1..N",
-    };
-    write!(w, r#"
+    pub fn render_erd(&mut self, erd: &ast::Erd) -> Result<()> {
+        self.graph_header()?;
+
+        let mut graph_attrs = Vec::new();
+        dbg!(&erd.title_options);
+
+        if let Some(label) = &erd.title_options.label {
+            graph_attrs.push((
+                "label",
+                format!("<<FONT POINT-SIZE=\"{}\">{}</FONT>>", erd.title_options.size, label),
+            ));
+            graph_attrs.push(("labeljust", "l".to_owned()));
+            graph_attrs.push(("labelloc", "t".to_owned()));
+        }
+
+        graph_attrs.push(("rankdir", "LR".to_owned()));
+        graph_attrs.push(("splines", "spline".to_owned()));
+
+        self.graph_attributes(&graph_attrs)?;
+
+        self.node_attributes(&vec![
+            ("label", r#""\N""#.to_owned()),
+            ("shape", "plaintext".to_owned()),
+        ])?;
+
+        self.edge_attributes(&vec![
+            ("color", "gray50".to_owned()),
+            ("minlen", "2".to_owned()),
+            ("style", "dashed".to_owned()),
+        ])?;
+
+        for e in &erd.entities {
+            self.entity(e)?;
+        }
+
+        for r in &erd.relationships {
+            self.relationship(r)?;
+        }
+
+        self.graph_footer()
+    }
+
+    fn graph_header(&mut self) -> Result<()> {
+        write!(self.w, "graph {{\n")
+    }
+
+    fn render_attribute(&mut self, a: &ast::Attribute) -> Result<()> {
+        let field = match (a.pk, a.fk) {
+            (true, true)    => format!("<I><U>{}</U></I>", a.field),
+            (true, false)   => format!("<U>{}</U>", a.field),
+            (false, true)   => format!("<I>{}</I>", a.field),
+            (false, false)  => a.field.clone(),
+        };
+        write!(self.w, "    ")?;
+        self.open_tag("TR")?;
+        self.open_tag_attrs("TD", &[("ALIGN", "LEFT".to_owned())])?;
+        match &a.options.label {
+            Some(l) => write!(self.w, "{} [{}]", field, l)?,
+            None => write!(self.w, "{}", a.field)?,
+        }
+        self.close_tag("TD")?;
+        self.close_tag("TR")?;
+        write!(self.w, "\n")
+    }
+
+    fn open_tag(&mut self, tag: &str) -> Result<()> {
+        write!(self.w, "<{}>", tag)
+    }
+
+    fn open_tag_attrs(&mut self, tag: &str, attrs: &[(&str, String)]) -> Result<()> {
+        write!(self.w, "<{}", tag)?;
+        for (k, v) in attrs {
+            write!(self.w, " {}=\"{}\"", k, v)?;
+        }
+        write!(self.w, ">")
+    }
+
+    fn close_tag(&mut self, tag: &str) -> Result<()> {
+        write!(self.w, "</{}>", tag)
+    }
+
+    fn relationship(&mut self, r: &ast::Relation) -> Result<()> {
+        let head_card = match r.card2 {
+            ast::Cardinality::ZeroOne => "{0,1}",
+            ast::Cardinality::One => "1",
+            ast::Cardinality::ZeroPlus => "0..N",
+            ast::Cardinality::OnePlus => "1..N",
+        };
+        let tail_card = match r.card1 {
+            ast::Cardinality::ZeroOne => "{0,1}",
+            ast::Cardinality::One => "1",
+            ast::Cardinality::ZeroPlus => "0..N",
+            ast::Cardinality::OnePlus => "1..N",
+        };
+        write!(self.w, r#"
     "{}" -- "{}" [ headlabel="{}", taillabel="{}" ];
-"#, r.entity1, r.entity2, head_card, tail_card)?;
-
-    Ok(())
-}
-
-fn render_entity<W: Write>(w: &mut W, e: &ast::Entity) -> Result<()> {
-    write!(w, "    \"{}\" [\n", e.name)?;
-    write!(w, r##"        label=<
-<FONT FACE="Helvetica">
-  <TABLE BORDER="0" CELLBORDER="1" CELLPADDING="4" CELLSPACING="0">
-    <TR><TD><B><FONT POINT-SIZE="16">{}</FONT></B></TD></TR>
-"##, e.name)?;
-
-    for a in &e.attribs {
-        render_attribute(w, a)?;
+"#, r.entity1, r.entity2, head_card, tail_card)
     }
 
-    write!(w, r#"  </TABLE>
+    fn entity(&mut self, e: &ast::Entity) -> Result<()> {
+        write!(self.w, r#"    "{name}" [
+        label=<
+"#, name=e.name)?;
+
+        self.open_tag_attrs("FONT", &[("FACE", e.header_options.font.clone())])?;
+        write!(self.w, "\n  ")?;
+
+        let attrs = &[
+            ("BORDER", e.header_options.border.to_string()),
+            ("CELLBORDER", e.header_options.cell_border.to_string()),
+            ("CELLPADDING", e.header_options.cell_padding.to_string()),
+            ("CELLSPACING", e.header_options.cell_spacing.to_string()),
+        ];
+        self.open_tag_attrs("TABLE", attrs)?;
+
+        write!(
+            self.w,
+            "\n    <TR><TD><B><FONT POINT-SIZE=\"{size}\">{name}</FONT></B></TD></TR>\n",
+            size=e.header_options.size,
+            name=e.name,
+        )?;
+
+        for a in &e.attribs {
+            self.render_attribute(a)?;
+        }
+
+        write!(self.w, r#"  </TABLE>
 </FONT>
 >];
 "#)?;
 
-    Ok(())
-}
-
-fn graph_attributes<W: Write>(w: &mut W, opts: &Vec<(&str, String)>) -> Result<()> {
-    attributes(w, "graph", opts)
-}
-
-fn node_attributes<W: Write>(w: &mut W, opts: &Vec<(&str, String)>) -> Result<()> {
-    attributes(w, "node", opts)
-}
-
-fn edge_attributes<W: Write>(w: &mut W, opts: &Vec<(&str, String)>) -> Result<()> {
-    attributes(w, "edge", opts)
-}
-
-fn attributes<W: Write>(w: &mut W, name: &str, opts: &Vec<(&str, String)>) -> Result<()> {
-    write!(w, "    {} [\n", name)?;
-    for (key, value) in opts {
-        write!(w, "        {}={},\n", key, value)?;
+        Ok(())
     }
-    write!(w, "    ];\n")?;
 
-    Ok(())
+    fn graph_attributes(&mut self, opts: &Vec<(&str, String)>) -> Result<()> {
+        self.attributes("graph", opts)
+    }
+
+    fn node_attributes(&mut self, opts: &Vec<(&str, String)>) -> Result<()> {
+        self.attributes("node", opts)
+    }
+
+    fn edge_attributes(&mut self, opts: &Vec<(&str, String)>) -> Result<()> {
+        self.attributes("edge", opts)
+    }
+
+    fn attributes(&mut self, name: &str, opts: &Vec<(&str, String)>) -> Result<()> {
+        write!(self.w, "    {} [\n", name)?;
+        for (key, value) in opts {
+            write!(self.w, "        {}={},\n", key, value)?;
+        }
+        write!(self.w, "    ];\n")
+    }
+
+    fn graph_footer(&mut self) -> Result<()> {
+        write!(self.w, "}}\n")
+    }
+
+
 }
 
-fn graph_footer<W: Write>(w: &mut W) -> Result<()> {
-    write!(w, "}}\n")
-}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -139,7 +185,8 @@ mod tests {
     fn empty_graph() {
         let erd = ast::Erd::default();
         let mut buf = Vec::new();
-        render(&mut buf, &erd).unwrap();
+        let mut renderer = Renderer::new(&mut buf);
+        renderer.render_erd(&erd).unwrap();
         assert_eq!(from_utf8(&buf).unwrap(), r#"graph {
     graph [
         rankdir=LR,
@@ -167,7 +214,8 @@ title {label: "Foo"}
 "#;
         let erd = parse_erd(s).unwrap();
         let mut buf = Vec::new();
-        render(&mut buf, &erd).unwrap();
+        let mut renderer = Renderer::new(&mut buf);
+        renderer.render_erd(&erd).unwrap();
         assert_eq!(from_utf8(&buf).unwrap(), r##"graph {
     graph [
         label=<<FONT POINT-SIZE="30">Foo</FONT>>,
@@ -202,7 +250,8 @@ title {label: "Foo"}
         let s = include_str!("../examples/simple.er");
         let erd = parse_erd(s).unwrap();
         let mut buf = Vec::new();
-        render(&mut buf, &erd).unwrap();
+        let mut renderer = Renderer::new(&mut buf);
+        renderer.render_erd(&erd).unwrap();
         assert_eq!(from_utf8(&buf).unwrap(), r##"graph {
     graph [
         rankdir=LR,
@@ -252,15 +301,15 @@ title {label: "Foo"}
     #[test]
     fn test_empty_graph_with_opts() {
         let mut buf = Vec::new();
-        graph_header(&mut buf).unwrap();
-        graph_attributes(
-            &mut buf, 
+        let mut renderer = Renderer::new(&mut buf);
+        renderer.graph_header().unwrap();
+        renderer.graph_attributes(
             &vec![
                 ("a", "b".to_owned()),
                 ("c", "\"d\"".to_owned())
             ],
         ).unwrap();
-        graph_footer(&mut buf).unwrap();
+        renderer.graph_footer().unwrap();
         assert_eq!(from_utf8(&buf).unwrap(),
 r#"graph {
     graph [

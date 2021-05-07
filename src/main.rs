@@ -63,7 +63,8 @@ fn main() {
         None => Box::new(io::stdout()),
     };
 
-    if let Err(err) = render::render(&mut output, &erd) {
+    let mut renderer = render::Renderer::new(output);
+    if let Err(err) = renderer.render_erd(&erd) {
         eprintln!("Failed to render: {}", err);
         std::process::exit(1);
     }
