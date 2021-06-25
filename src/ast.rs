@@ -211,13 +211,13 @@ impl Default for HeaderOptions {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EntityOptions {
-    pub background_color: String,
     pub border: u8,
     pub cell_border: u8,
     pub cell_spacing: u8,
     pub cell_padding: u8,
     pub font: String,
 
+    pub background_color: Option<String>,
     pub label: Option<String>,
     pub color: Option<String>,
     pub size: Option<u8>,
@@ -234,9 +234,9 @@ impl EntityOptions {
     pub fn merge_hashmap(&mut self, m: &HashMap<String, String>) -> Result<(), String> {
         for (k, v) in m {
             match k.as_str() {
+                OPT_BACKGROUND_COLOR => self.background_color = Some(v.clone()),
                 OPT_LABEL => self.label = Some(v.clone()),
                 OPT_COLOR => self.color = Some(v.clone()),
-                OPT_BACKGROUND_COLOR => self.background_color = v.clone(),
                 OPT_SIZE => self.size = Some(match v.parse() {
                     Ok(v) => v,
                     Err(_) => return Err(format!("could not parse size as integer: {}", v)),
@@ -258,12 +258,12 @@ impl EntityOptions {
 impl Default for EntityOptions {
     fn default() -> Self {
         Self {
-            background_color: "#d0e0d0".to_owned(),
             border: 0,
             cell_border: 1,
             cell_spacing: 0,
             cell_padding: 4,
             font: "Helvetica".to_owned(),
+            background_color: None,
             label: None,
             color: None,
             size: None,

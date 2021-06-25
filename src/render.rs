@@ -104,8 +104,7 @@ impl<W: Write> Renderer<W> {
             ast::Cardinality::ZeroPlus => "0..N",
             ast::Cardinality::OnePlus => "1..N",
         };
-        write!(self.w, r#"
-    "{}" -- "{}" [ headlabel="{}", taillabel="{}" ];
+        write!(self.w, r#""{}" -- "{}" [ headlabel="{}", taillabel="{}" ];
 "#, r.entity1, r.entity2, head_card, tail_card)
     }
 
@@ -117,13 +116,16 @@ impl<W: Write> Renderer<W> {
         self.open_tag_attrs("FONT", &[("FACE", e.header_options.font.clone())])?;
         write!(self.w, "\n  ")?;
 
-        let attrs = &[
-            ("BORDER", e.header_options.border.to_string()),
-            ("CELLBORDER", e.header_options.cell_border.to_string()),
-            ("CELLPADDING", e.header_options.cell_padding.to_string()),
-            ("CELLSPACING", e.header_options.cell_spacing.to_string()),
-        ];
-        self.open_tag_attrs("TABLE", attrs)?;
+        let mut attrs = Vec::new();
+        attrs.push(("BORDER", e.header_options.border.to_string()));
+        attrs.push(("CELLBORDER", e.header_options.cell_border.to_string()));
+        attrs.push(("CELLPADDING", e.header_options.cell_padding.to_string()));
+        attrs.push(("CELLSPACING", e.header_options.cell_spacing.to_string()));
+
+        if let Some(c) = &e.options.background_color {
+            attrs.push(("BGCOLOR", c.clone()))
+        }
+        self.open_tag_attrs("TABLE", &attrs)?;
 
         write!(
             self.w,
