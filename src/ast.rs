@@ -33,15 +33,6 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new<S: Into<String>>(name: S) -> Self {
-        Self {
-            name: name.into(),
-            attribs: Vec::default(),
-            options: EntityOptions::default(),
-            header_options: HeaderOptions::default(),
-        }
-    }
-    
     pub fn add_attribute(&mut self, attr: Attribute) {
         self.attribs.push(attr)
     }

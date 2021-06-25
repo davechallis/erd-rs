@@ -180,7 +180,7 @@ mod tests {
     use super::*;
     use crate::parser::parse_erd;
     use std::str::from_utf8;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn empty_graph() {

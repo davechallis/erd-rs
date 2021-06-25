@@ -49,7 +49,7 @@ fn main() {
         }
     };
 
-    let mut output: Box<dyn std::io::Write> = match output_file {
+    let output: Box<dyn std::io::Write> = match output_file {
         Some(ref path) => {
             let f = match File::create(path) {
                 Ok(f) => f,

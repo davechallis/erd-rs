@@ -30,7 +30,6 @@ use nom::{IResult, branch::alt, InputTakeAtPosition, AsChar,
     sequence::{
         delimited,
         separated_pair,
-        pair,
         terminated,
         preceded,
     }};
@@ -144,21 +143,6 @@ fn multispace0_comment(i: &str) -> IResult<&str, (), ErdParseError<&str>> {
         )
     )(i)
 }
-
-fn eol_comment(i: &str) -> IResult<&str, (), ErdParseError<&str>> {
-    value(
-        (),
-        delimited(
-            space0, 
-            alt((
-                line_ending,
-                comment,
-            )),
-            multispace0,
-        )
-    )(i)
-}
-
 
 fn entity(i: &str) -> IResult<&str, ast::Entity, ErdParseError<&str>> {
     let (i, name) = delimited(char('['), ident, char(']'))(i)?;
@@ -416,21 +400,21 @@ mod tests {
     fn test_entity_simple() {
         let (i, e) = entity("[foo]").unwrap();
         assert!(i.is_empty());
-        assert_eq!(e, ast::Entity::new("foo"));
+        assert_eq!(e, new_entity("foo"));
     }
 
     #[test]
     fn test_entity_quoted() {
         let (i, e) = entity("[\"foo bar\"]").unwrap();
         assert!(i.is_empty());
-        assert_eq!(e, ast::Entity::new("foo bar"));
+        assert_eq!(e, new_entity("foo bar"));
     }
 
     #[test]
     fn test_entity_with_option() {
         let (i, e) = entity("[foo] {color: \"#1234AA\"}").unwrap();
         assert!(i.is_empty());
-        let mut expected = ast::Entity::new("foo");
+        let mut expected = new_entity("foo");
         let o = &hashmap!{"color".to_owned() => "#1234AA".to_owned()};
         expected.options = EntityOptions::from_hashmap(o).unwrap();
         expected.header_options = HeaderOptions::from_hashmap(o).unwrap();
@@ -441,7 +425,7 @@ mod tests {
     fn test_entity_quoted_with_multiple_options() {
         let (i, e) = entity("[`foo - bar`] {size: \"10\", font: \"Equity\"}").unwrap();
         assert!(i.is_empty());
-        let mut expected = ast::Entity::new("foo - bar");
+        let mut expected = new_entity("foo - bar");
         let o = &hashmap!{
             "size".to_owned() => "10".to_owned(),
             "font".to_owned() => "Equity".to_owned(),
@@ -777,5 +761,14 @@ mod tests {
         assert_eq!(go.options["k2"], "v2");
 
         assert!(global_option(r#"something {}"#).is_err());
+    }
+
+    fn new_entity<S: Into<String>>(name: S) -> ast::Entity {
+        ast::Entity {
+            name: name.into(),
+            attribs: Vec::default(),
+            options: ast::EntityOptions::default(),
+            header_options: ast::HeaderOptions::default(),
+        }
     }
 }
