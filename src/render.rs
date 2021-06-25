@@ -14,7 +14,6 @@ impl<W: Write> Renderer<W> {
         self.graph_header()?;
 
         let mut graph_attrs = Vec::new();
-        dbg!(&erd.title_options);
 
         if let Some(label) = &erd.title_options.label {
             graph_attrs.push((
@@ -104,7 +103,7 @@ impl<W: Write> Renderer<W> {
             ast::Cardinality::ZeroPlus => "0..N",
             ast::Cardinality::OnePlus => "1..N",
         };
-        write!(self.w, r#""{}" -- "{}" [ headlabel="{}", taillabel="{}" ];
+        write!(self.w, r#"    "{}" -- "{}" [ headlabel="{}", taillabel="{}" ];
 "#, r.entity1, r.entity2, head_card, tail_card)
     }
 
@@ -293,7 +292,6 @@ title {label: "Foo"}
   </TABLE>
 </FONT>
 >];
-
     "Person" -- "Birth Place" [ headlabel="1", taillabel="0..N" ];
 }
 "##);
